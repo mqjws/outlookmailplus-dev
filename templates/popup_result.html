@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>OAuth 回调</title>
+    <style>
+        body { font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+        .card { background: white; border-radius: 8px; padding: 32px; max-width: 400px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin: 4px; }
+        .btn-primary { background: #0078d4; color: white; }
+        .btn-secondary { background: #e0e0e0; }
+        .guidance { color: #666; font-size: 14px; margin-top: 12px; }
+    </style>
+</head>
+<body>
+    {% if error %}
+    <div class="card">
+        <h2>⚠️ 授权未完成</h2>
+        <p><strong>{{ error_code }}</strong></p>
+        <p>{{ error_description }}</p>
+        <p class="guidance">💡 {{ guidance }}</p>
+        <button class="btn btn-secondary" onclick="window.close()">关闭</button>
+    </div>
+    {% else %}
+    <div class="card">
+        <h2>✅ 授权成功</h2>
+        <p>请复制当前地址栏的完整 URL，粘贴到 Token 工具页面的「手动换取」区域</p>
+        <button class="btn btn-primary" onclick="copyCurrentUrl()">📋 复制回调地址</button>
+        <button class="btn btn-secondary" onclick="window.close()">关闭</button>
+        <p id="copy-tip" style="display:none; color:green; margin-top:8px;">✓ 已复制</p>
+    </div>
+    {% endif %}
+
+    <script>
+    function copyCurrentUrl() {
+        navigator.clipboard.writeText(window.location.href).then(function() {
+            document.getElementById('copy-tip').style.display = 'block';
+        });
+    }
+    </script>
+</body>
+</html>

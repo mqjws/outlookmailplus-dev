@@ -1,0 +1,62 @@
+name: outlook-public
+
+services:
+  app:
+    image: outlook-email-plus:${OUTLOOK_IMAGE_TAG:-2.7.0-public-20261104}
+    pull_policy: never
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        APP_UID: "1001"
+        APP_GID: "1001"
+    env_file:
+      - path: ./.env.production
+        format: raw
+    environment:
+      FLASK_ENV: production
+      DATABASE_PATH: /app/data/outlook_accounts.db
+      SESSION_COOKIE_SECURE: "true"
+      WTF_CSRF_SSL_STRICT: "true"
+      TRUSTED_HOSTS: outlook.ivano.cyou,localhost,127.0.0.1
+      DOCKER_SELF_UPDATE_ALLOW: "false"
+      GUNICORN_CMD_ARGS: ""
+    ports:
+      - "127.0.0.1:5001:5000"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.runtime
+        target: /app/.runtime
+        bind:
+          create_host_path: false
+    user: "1001:1001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    cpus: 2.0
+    mem_limit: 2g
+    pids_limit: 256
+    restart: unless-stopped
+    stop_grace_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz', timeout=4).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

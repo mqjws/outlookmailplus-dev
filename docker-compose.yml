@@ -1,0 +1,102 @@
+services:
+  app:
+    # 模式一（默认）：直接拉取远端镜像（适合大多数用户）
+    # 镜像标签可通过 .env 的 IMAGE_TAG 控制（默认 latest）
+    # GHCR 镜像（国内网络推荐，访问更稳定）：
+    image: ghcr.io/zeropointsix/outlook-email-plus:${IMAGE_TAG:-latest}
+    # Docker Hub 镜像（如需切换取消注释，并注释上行）：
+    # image: guangshanshui/outlook-email-plus:${IMAGE_TAG:-latest}
+
+    # 模式二（开发者）：本地构建（取消注释 build，并按需注释 image）
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    container_name: outlook-email-plus
+
+    # 主机侧端口（默认 5001，避免与本机 5000 冲突）
+    ports:
+      - "${APP_PORT:-5001}:5000"
+
+    # 从 .env 注入所有环境变量（避免在 compose 里硬编码）
+    env_file:
+      - .env
+
+    # 仅保留"必须项"强校验
+    environment:
+      SECRET_KEY: "${SECRET_KEY:?请在 .env 中设置 SECRET_KEY（必须稳定，用于加密数据库敏感信息）}"
+      # 一键更新 Token：与下方 watchtower 服务保持一致；留空将使用内置默认值，可直接工作
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
+      # Gunicorn 并发：默认保持单 worker，使用多线程承载同步读信/等待接口，避免后台调度器重复启动
+      GUNICORN_WORKERS: "${GUNICORN_WORKERS:-1}"
+      GUNICORN_THREADS: "${GUNICORN_THREADS:-8}"
+      GUNICORN_TIMEOUT: "${GUNICORN_TIMEOUT:-120}"
+      # OAuth Token 工具（可选；如需显式覆盖，可在 .env 中配置下列变量）
+      # OAUTH_TOOL_ENABLED: "true"
+      # OAUTH_CLIENT_ID: ""
+      # OAUTH_CLIENT_SECRET: ""
+      # OAUTH_REDIRECT_URI: ""
+      # OAUTH_SCOPE: "offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
+      # Graph 仅为可选扩展："offline_access https://graph.microsoft.com/.default"
+      # OAUTH_TENANT: "consumers"
+      # Docker API 自更新（可选，高级功能；需同时取消下方 docker.sock 挂载注释）
+      DOCKER_SELF_UPDATE_ALLOW: "${DOCKER_SELF_UPDATE_ALLOW:-false}"
+
+    volumes:
+      - ./data:/app/data
+      - ./.runtime:/app/.runtime
+      - ./plugins:/app/plugins
+      # Docker socket 挂载（可选，仅用于 Docker API 自更新功能）
+      # ⚠️ 警告：挂载 docker.sock 会授予容器完全的 Docker API 访问权限，请谨慎使用
+      # - /var/run/docker.sock:/var/run/docker.sock
+
+    restart: unless-stopped
+
+    # 防止日志无限增长打满磁盘
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+      - outlook-net
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # 与上方 app 服务的 WATCHTOWER_HTTP_API_TOKEN 保持一致；留空均使用同一内置默认值
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      # 禁用定时轮询，仅通过界面触发更新
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
+    command: --http-api-update --label-enable
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      - outlook-net
+
+networks:
+  outlook-net:
+    driver: bridge

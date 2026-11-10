@@ -1,0 +1,23 @@
+{
+  "name": "dev",
+  "version": "2.1.0",
+  "description": "[English](./README.en.md)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test:mailbox-folder": "node --test tests/mailbox-folder/mailbox-folder.test.js",
+    "test": "echo \"Use a scoped test script, for example: npm run test:browser-extension\" && exit 1",
+    "test:browser-extension": "jest --runInBand --config tests/browser-extension/jest.config.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0"
+  }
+}

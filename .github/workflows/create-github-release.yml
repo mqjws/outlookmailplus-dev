@@ -1,0 +1,71 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify release version alignment
+        env:
+          GITHUB_REF: ${{ github.ref }}
+        run: python scripts/check_release_version.py
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          tag = "${{ github.ref_name }}"
+          changelog = Path("CHANGELOG.md")
+          if not changelog.exists():
+            print("CHANGELOG.md not found", file=sys.stderr)
+            sys.exit(1)
+
+          text = changelog.read_text(encoding="utf-8")
+
+          # Match headings like: ## [v1.11.0] - 2026-04-03
+          header_re = re.compile(rf"^##\s+\[{re.escape(tag)}\]\s+-\s+.*$", re.M)
+          m = header_re.search(text)
+          if not m:
+            print(f"Release section for {tag} not found in CHANGELOG.md", file=sys.stderr)
+            sys.exit(1)
+
+          start = m.start()
+          after_header = m.end()
+          next_header = re.search(r"^##\s+\[", text[after_header:], re.M)
+          end = after_header + next_header.start() if next_header else len(text)
+
+          section = text[start:end].strip()
+          lines = section.splitlines()
+          body = "\n".join(lines[1:]).strip() if lines and lines[0].startswith("##") else section
+          if not body:
+            print(f"Release body for {tag} is empty", file=sys.stderr)
+            sys.exit(1)
+
+          out = Path("release_body.md")
+          out.write_text(body + "\n", encoding="utf-8")
+          print(f"Wrote {out} for tag {tag}")
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: release_body.md
+          draft: false
+          prerelease: false

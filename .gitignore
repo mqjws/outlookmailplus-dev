@@ -1,0 +1,152 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+env/
+ENV/
+.venv/
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+data/
+
+# 环境变量
+.env
+.env.*
+!.env.example
+!.env.*.example
+deploy/cloudflare-realip.conf
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+.kiro/
+
+# 测试缓存
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage/
+htmlcov/
+
+# Codex / 本地过程留痕（不入库）
+.codex/
+
+# OpenCode / 本地AI工具（不入库）
+.opencode/
+opencode.json
+verification.md
+
+# 本地文档（docs/ 已纳入版本管理）
+# docs/
+
+# 内部文档（不开源）
+PRD/
+我们的文档/
+AGENTS.md
+CONTRIBUTING.md
+SECURITY.md
+tests/layout-system/README.md
+TODO.md
+
+# Node.js
+node_modules/
+
+# 临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+desktop.ini
+.mcp.json
+.ace-tool/
+.claude/
+
+# Cloudflare 部署（含 node_modules 和敏感配置，不入库）
+cf-deploy/
+.wrangler/
+
+# Linter 缓存
+.ruff_cache/
+
+# 空目录占位
+-p/
+
+# Windows 特殊文件
+NUL
+
+# 测试截图（调试产物，不入库）
+tests/screenshots/
+
+# 其他不需要的文件
+PixPin_*.png
+compact-*.png
+compact-ui-*.png
+mailbox-*.png
+exeample/
+ui-preview.html
+AI_EXECUTION_PROMPT.md
+AI工作提示词*.md
+*api-key-credit-monitoring.md
+CLAUDE.md
+安全漏洞.md
+get_oauth_token.py
+start_temp.bat
+.aider*
+
+cookies.txt
+
+# 本地邮箱导入/导出（可能包含密码和 refresh token）
+/*.txt
+!/requirements.txt
+/*.csv
+/*.tsv
+/imports/
+/exports/
+
+# 运行状态、会话与备份
+/.runtime/
+/session/
+/upload/
+/backups/
+logs/
+*.bak
+*.backup
+
+# 私钥与证书容器
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# 本地打包产物，使用源码重建
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# 本地操作记录与调试截图
+/WORKSPACE.md
+/screenshot_*.png
+
+# 包含真实 Cloudflare 管理员密钥的本地联调材料
+/tests/test_pool_cf_real_e2e.py
+/docs/BUG/2026-04-09-临时邮箱-CF域名配置不生效-Options口径不一致BUG.md

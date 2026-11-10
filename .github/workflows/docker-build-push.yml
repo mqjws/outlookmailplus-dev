@@ -1,0 +1,134 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - main
+      - master
+      - dev          # dev 分支自动构建 :dev 标签
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'templates/**'
+      - 'static/**'
+      - '.github/workflows/docker-build-push.yml'
+  workflow_dispatch:
+
+env:
+  # Docker Hub（可选）：需要配置仓库 Secrets：DOCKERHUB_USERNAME / DOCKERHUB_TOKEN
+  DOCKERHUB_IMAGE: guangshanshui/outlook-email-plus
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify release version alignment (tag builds only)
+        env:
+          GITHUB_REF: ${{ github.ref }}
+        run: python scripts/check_release_version.py
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort mypy bandit[toml]
+
+      - name: Run formatter checks
+        run: |
+          black --check outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py
+          isort --check-only --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py
+
+      - name: Run static analysis gate
+        run: |
+          flake8 outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 outlook_web/repositories/settings.py outlook_web/services/external_api.py outlook_web/controllers/system.py web_outlook_app.py --count --max-complexity=10 --max-line-length=127 --statistics
+          mypy --config-file pyproject.toml outlook_web/repositories/settings.py outlook_web/services/external_api.py outlook_web/controllers/system.py web_outlook_app.py
+
+      - name: Run security gate
+        run: bandit -r outlook_web web_outlook_app.py outlook_mail_reader.py start.py -lll
+
+      - name: Run publish gate tests
+        run: python -m unittest discover -s tests -v
+
+  build-and-push:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image names
+        id: names
+        shell: bash
+        run: |
+          # GHCR 要求小写
+          echo "ghcr_image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/outlook-email-plus" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "dockerhub_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "images=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/outlook-email-plus,${{ env.DOCKERHUB_IMAGE }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dockerhub_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "images=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/outlook-email-plus" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub (optional)
+        if: steps.names.outputs.dockerhub_enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.names.outputs.images }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-,enable=${{ startsWith(github.ref, 'refs/heads/') }}
+            type=sha,prefix={{tag}}-,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'master' }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Image digest
+        run: echo ${{ steps.build.outputs.digest }}

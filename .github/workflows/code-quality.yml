@@ -1,0 +1,116 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - "**.py"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - ".github/workflows/code-quality.yml"
+  pull_request:
+    paths:
+      - "**.py"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - ".github/workflows/code-quality.yml"
+  workflow_dispatch:
+
+jobs:
+  linting:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort mypy
+
+      - name: Run Black (Code Formatter Check)
+        run: black --check --diff outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py
+
+      - name: Run isort (Import Sorting Check)
+        run: isort --check-only --diff --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py
+
+      - name: Run Flake8 (Linting)
+        run: flake8 outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Flake8 (Complexity Check)
+        run: >
+          flake8
+          outlook_web/repositories/settings.py
+          outlook_web/services/external_api.py
+          outlook_web/controllers/system.py
+          web_outlook_app.py
+          --count
+          --max-complexity=10
+          --max-line-length=127
+          --statistics
+
+      - name: Run mypy (Core Modules)
+        run: >
+          mypy
+          --config-file pyproject.toml
+          outlook_web/repositories/settings.py
+          outlook_web/services/external_api.py
+          outlook_web/controllers/system.py
+          web_outlook_app.py
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit[toml]
+
+      - name: Run Bandit Security Scan
+        shell: bash
+        run: |
+          set +e
+          bandit -r outlook_web web_outlook_app.py outlook_mail_reader.py start.py -f sarif -o bandit-report.sarif
+          report_status=$?
+          bandit -r outlook_web web_outlook_app.py outlook_mail_reader.py start.py -lll
+          gate_status=$?
+          echo "bandit_report_exit_code=$report_status" >> "$GITHUB_ENV"
+          echo "bandit_gate_exit_code=$gate_status" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Upload Bandit SARIF
+        if: always() && hashFiles('bandit-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit-report.sarif
+
+      - name: Fail on Bandit Findings
+        if: always()
+        shell: bash
+        run: |
+          status="${bandit_gate_exit_code:-1}"
+          if [ "$status" -ne 0 ]; then
+            echo "Bandit found high-severity issues, exit code=$status"
+            exit "$status"
+          fi
